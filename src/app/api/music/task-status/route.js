@@ -13,13 +13,17 @@ export async function GET(request) {
     return NextResponse.json({ error: "Missing taskId" }, { status: 400 });
   }
 
-  const apiKey = process.env.GOAPI_KEY || process.env.UDIO_API_KEY;
+  const apiKey = process.env.PIAPI_KEY || process.env.UDIO_API_KEY || process.env.GOAPI_KEY;
+  const isPiAPI = Boolean(process.env.PIAPI_KEY);
+  const endpoint = isPiAPI ? `https://api.piapi.ai/api/v1/task/${taskId}` : `https://api.goapi.ai/api/v1/task/${taskId}`;
+  const providerName = isPiAPI ? "PiAPI" : "GoAPI";
+
   if (!apiKey) {
-    return NextResponse.json({ error: "Missing GOAPI_KEY in environment variables" }, { status: 500 });
+    return NextResponse.json({ error: "Missing API Key in environment variables" }, { status: 500 });
   }
 
   try {
-    const pollRes = await fetch(`https://api.goapi.ai/api/v1/task/${taskId}`, {
+    const pollRes = await fetch(endpoint, {
       headers: {
         "X-API-Key": apiKey,
         "Authorization": `Bearer ${apiKey}`,
@@ -28,7 +32,7 @@ export async function GET(request) {
     });
 
     if (!pollRes.ok) {
-      throw new Error(`GoAPI HTTP ${pollRes.status}: ${pollRes.statusText}`);
+      throw new Error(`${providerName} HTTP ${pollRes.status}: ${pollRes.statusText}`);
     }
 
     const pollData = await pollRes.json();
@@ -37,7 +41,7 @@ export async function GET(request) {
     if (!task) {
       return NextResponse.json({
         status: "processing",
-        progress: "Menunggu respons dari Udio cluster...",
+        progress: `Menunggu respons dari ${providerName} Udio cluster...`,
       });
     }
 
@@ -59,7 +63,7 @@ export async function GET(request) {
       const trackItems = [
         {
           id: "mix-a",
-          label: `Mix A • ${songA.title || "Crispy Bouncy Drop"} (Udio AI)`,
+          label: `Mix A • ${songA.title || "Crispy Bouncy Drop"} (${providerName} Udio AI)`,
           sublabel: "Fokus pada hook vokal melodis & punchy drop festival",
           url: track1Url,
           coverUrl: cover1,
@@ -70,7 +74,7 @@ export async function GET(request) {
         },
         {
           id: "mix-b",
-          label: `Mix B • ${songB.title || "Heavy XXL Drop"} (Udio AI)`,
+          label: `Mix B • ${songB.title || "Heavy XXL Drop"} (${providerName} Udio AI)`,
           sublabel: "Sub-bass 808 overdriven ekstra tebal untuk dancefloor booster",
           url: track2Url,
           coverUrl: cover2,
@@ -92,12 +96,12 @@ export async function GET(request) {
         trackItems,
         songs,
         coverUrl: cover1,
-        engine: "Udio AI (GoAPI music-u)",
+        engine: `${providerName} Udio AI (music-u)`,
       });
     }
 
     if (status === "failed" || status === "error") {
-      const errMsg = task?.error?.message || task?.detail || "Pembuatan lagu gagal di Udio AI cluster.";
+      const errMsg = task?.error?.message || task?.detail || `Pembuatan lagu gagal di ${providerName} cluster.`;
       return NextResponse.json({
         status: "failed",
         error: errMsg,
@@ -107,7 +111,7 @@ export async function GET(request) {
     // Still in progress / pending
     return NextResponse.json({
       status: status, // "pending" or "processing"
-      progress: task?.detail || (status === "pending" ? "Antrean model Udio AI disiapkan..." : "Udio AI sedang meracik multi-track audio..."),
+      progress: task?.detail || (status === "pending" ? `Antrean model ${providerName} Udio AI disiapkan...` : `${providerName} Udio AI sedang meracik multi-track audio...`),
     });
   } catch (err) {
     return NextResponse.json(

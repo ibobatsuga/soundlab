@@ -44,7 +44,11 @@ export async function POST(request) {
       _internalTransactionId,
     } = body;
 
-    const apiKey = process.env.GOAPI_KEY || process.env.UDIO_API_KEY;
+    const apiKey = process.env.PIAPI_KEY || process.env.UDIO_API_KEY || process.env.GOAPI_KEY;
+    const isPiAPI = Boolean(process.env.PIAPI_KEY);
+    const endpoint = isPiAPI ? "https://api.piapi.ai/api/v1/task" : "https://api.goapi.ai/api/v1/task";
+    const providerName = isPiAPI ? "PiAPI" : "GoAPI";
+
     const songTitle = title.trim() || generateEdmTitle(genre, artistReference);
 
     // If live API key is present and NOT running in sandbox-demo mode
@@ -52,7 +56,7 @@ export async function POST(request) {
       const isInstrumental = vocalType === "instrumental";
       const promptDescription = `${genre}, ${tempo}, ${artistReference} style, electronic club festival, ${dropIntensity} drop, punchy kicks, crispy sub-bass`;
 
-      const createResponse = await fetch("https://api.goapi.ai/api/v1/task", {
+      const createResponse = await fetch(endpoint, {
         method: "POST",
         headers: {
           "X-API-Key": apiKey,
@@ -77,7 +81,7 @@ export async function POST(request) {
       if (!createResponse.ok || taskData.code !== 200) {
         return NextResponse.json({
           success: false,
-          error: taskData.message || "GoAPI Udio menolak task pembuatan lagu.",
+          error: taskData.message || `${providerName} Udio menolak task pembuatan lagu.`,
           code: taskData.code || createResponse.status,
           apiErrorDetail: taskData.detail || null,
         }, { status: 400 });
@@ -87,7 +91,7 @@ export async function POST(request) {
       if (!taskId) {
         return NextResponse.json({
           success: false,
-          error: "Task ID tidak diterima dari GoAPI cluster.",
+          error: `Task ID tidak diterima dari ${providerName} cluster.`,
         }, { status: 502 });
       }
 
@@ -95,10 +99,11 @@ export async function POST(request) {
         success: true,
         isDemo: false,
         taskId,
+        provider: providerName,
         title: songTitle,
         genre,
         bpm: tempo,
-        description: `Diramu langsung via GoAPI Udio AI (music-u). Style ${artistReference} dengan aransemen ${dropIntensity} drop.`,
+        description: `Diramu via ${providerName} Udio AI (music-u). Style ${artistReference} dengan aransemen ${dropIntensity} drop.`,
         transactionId: _internalTransactionId || null,
       });
     }
