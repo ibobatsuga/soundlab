@@ -105,14 +105,23 @@ export default function NeonAudioPlayer({ result, onReset }) {
         </div>
       </div>
 
-      {/* Track Title & Description */}
-      <div className="mt-4">
-        <h2 className="text-2xl font-black text-white sm:text-3xl tracking-tight">
-          {result?.title}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400 leading-relaxed max-w-2xl">
-          {result?.description || "Racikan audio kustom berenergi tinggi dengan pemrosesan frekuensi sub-bass XXL."}
-        </p>
+      {/* Track Title, Artwork & Description */}
+      <div className="mt-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        {(currentTrack?.coverUrl || result?.coverUrl) && (
+          <img
+            src={currentTrack?.coverUrl || result?.coverUrl}
+            alt="Album Art"
+            className="h-20 w-20 rounded-2xl object-cover border border-lime-neon/30 shadow-lg shrink-0"
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <h2 className="text-2xl font-black text-white sm:text-3xl tracking-tight">
+            {result?.title}
+          </h2>
+          <p className="mt-1 text-xs text-slate-400 leading-relaxed max-w-2xl">
+            {result?.description || "Racikan audio kustom berenergi tinggi dengan pemrosesan frekuensi sub-bass XXL."}
+          </p>
+        </div>
       </div>
 
       {/* Dual Deck Mix Selector (Mix A vs Mix B) */}
@@ -210,7 +219,7 @@ export default function NeonAudioPlayer({ result, onReset }) {
           {/* Action Buttons: Download & WhatsApp Share */}
           <div className="flex flex-wrap items-center gap-2">
             <a
-              href={`/api/music/download?url=${encodeURIComponent(currentTrack?.url || '')}`}
+              href={`/api/music/download?url=${encodeURIComponent(currentTrack?.url || '')}&filename=${encodeURIComponent((result?.title || 'XXL_CHICKEN').replace(/\s+/g, '_') + '_' + (currentTrack?.id || 'track') + '.mp3')}`}
               className="flex items-center gap-2 rounded-xl bg-lime-neon px-4 py-2.5 text-xs font-black uppercase text-obsidian-950 shadow-neon hover:bg-yellow-300 transition-all"
             >
               <Download className="h-4 w-4" />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import HeroBanner from "@/components/HeroBanner";
 import SmartPresets from "@/components/SmartPresets";
@@ -12,7 +12,7 @@ import FAQSection from "@/components/FAQSection";
 import { CRISPY_PRESETS } from "@/data/edmCatalog";
 
 export default function Home() {
-  const [isSandbox, setIsSandbox] = useState(true); // Default to Sandbox ON for instant test
+  const [isSandbox, setIsSandbox] = useState(true); // Default to Sandbox ON for instant zero-friction testing
   const [selectedPresetId, setSelectedPresetId] = useState(CRISPY_PRESETS[0].id);
   
   const [formValues, setFormValues] = useState({
@@ -33,6 +33,16 @@ export default function Home() {
 
   const generatorRef = useRef(null);
   const resultRef = useRef(null);
+  const pollingIntervalRef = useRef(null);
+
+  // Clean up polling interval if component unmounts
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
 
   const handleSelectPreset = (preset) => {
     setSelectedPresetId(preset.id);
@@ -62,7 +72,7 @@ export default function Home() {
 
     try {
       setIsLoading(true);
-      setLoadingMessage("Menyiapkan transaksi order...");
+      setLoadingMessage("Menyiapkan invoice QRIS...");
 
       const res = await fetch("/api/transaction/create", {
         method: "POST",
@@ -80,13 +90,7 @@ export default function Home() {
       }
 
       setTransaction(data);
-
-      if (isSandbox) {
-        // Direct bypass in sandbox mode or prompt modal with instant button
-        setIsQRISOpen(true);
-      } else {
-        setIsQRISOpen(true);
-      }
+      setIsQRISOpen(true);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -98,52 +102,186 @@ export default function Home() {
     setIsQRISOpen(false);
     setIsLoading(true);
 
-    const progressSteps = [
-      "Membangun pondasi sub-bass 808 dan frequency response...",
-      "Menyiapkan build-up riser, synth sweep, dan snare roll...",
-      "Menyelaraskan vokal chops dengan groove drum ritmis...",
-      "Meracik Mix A (Crispy Bouncy Drop) & Mix B (Heavy XXL Bass Drop)...",
-      "Final mastering audio dan mengompilasi file MP3...",
-    ];
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
 
-    let stepIndex = 0;
-    setLoadingMessage(progressSteps[0]);
-    const stepInterval = setInterval(() => {
-      stepIndex += 1;
-      if (stepIndex < progressSteps.length) {
-        setLoadingMessage(progressSteps[stepIndex]);
-      }
-    }, 1200);
+    setLoadingMessage("Menginisialisasi pipeline audio XXL...");
 
     try {
-      const res = await fetch("/api/music/generate", {
+      const res = await fetch("/api/music/create-task", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formValues,
+          isSandbox,
           _internalTransactionId: txId,
         }),
       });
 
       const data = await res.json();
-      clearInterval(stepInterval);
 
       if (!res.ok) {
-        throw new Error(data.error || "Gagal memproses musik.");
+        // If GoAPI returned 400 (e.g. credit limit or invalid params)
+        const errMsg = data.error || "Gagal memulai tugas pembuatan lagu di server.";
+        const wantFallback = confirm(
+          `⚠️ Laporan Node Audio:\n${errMsg}\n\nApakah Anda ingin memuat aransemen Master Studio Preview XXLCHICKEN sekarang?`
+        );
+        if (wantFallback) {
+          loadFallbackMaster(data.title || "XXL Banger (Studio Master)");
+          return;
+        } else {
+          setIsLoading(false);
+          return;
+        }
       }
 
-      setResult(data);
-      setTimeout(() => {
-        if (resultRef.current) {
-          resultRef.current.scrollIntoView({ behavior: "smooth" });
-        }
-      }, 200);
+      // Case 1: Instant Demo / Sandbox Mode
+      if (data.isDemo) {
+        const demoSteps = [
+          "Membangun pondasi sub-bass 808 dan frequency response...",
+          "Menyiapkan build-up riser, synth sweep, dan snare roll...",
+          "Menyelaraskan vokal chops dengan groove drum ritmis...",
+          "Final mastering audio dan kompilasi 24-bit...",
+        ];
+        let idx = 0;
+        setLoadingMessage(demoSteps[0]);
+        const stepInterval = setInterval(() => {
+          idx += 1;
+          if (idx < demoSteps.length) {
+            setLoadingMessage(demoSteps[idx]);
+          } else {
+            clearInterval(stepInterval);
+            setResult(data);
+            setIsLoading(false);
+            setTimeout(() => {
+              if (resultRef.current) {
+                resultRef.current.scrollIntoView({ behavior: "smooth" });
+              }
+            }, 250);
+          }
+        }, 600);
+        return;
+      }
+
+      // Case 2: Real Udio Task via GoAPI - Start Client-Side Polling
+      if (data.taskId) {
+        const taskId = data.taskId;
+        const taskTitle = data.title;
+        const taskGenre = data.genre;
+        const taskBpm = data.bpm;
+
+        let elapsedSeconds = 0;
+        const pollIntervalMs = 4500;
+        const maxWaitSeconds = 600; // 10 minutes max
+
+        setLoadingMessage("Terhubung ke Udio AI (music-u)... Task ID: " + taskId.slice(0, 8));
+
+        pollingIntervalRef.current = setInterval(async () => {
+          elapsedSeconds += Math.round(pollIntervalMs / 1000);
+
+          // Dynamic descriptive status updates
+          if (elapsedSeconds < 20) {
+            setLoadingMessage(`Mengunggah blueprint prompt ke Neural Node Udio... (${elapsedSeconds}s)`);
+          } else if (elapsedSeconds < 60) {
+            setLoadingMessage(`Meracik bassline ${taskGenre} & harmoni synth drop... (${elapsedSeconds}s)`);
+          } else if (elapsedSeconds < 120) {
+            setLoadingMessage(`Melakukan sintesis vokal AI & stereo multi-layer... (${elapsedSeconds}s)`);
+          } else if (elapsedSeconds < 240) {
+            setLoadingMessage(`Rendering dual mix (Mix A Bouncy & Mix B Heavy Drop)... (${elapsedSeconds}s)`);
+          } else {
+            setLoadingMessage(`Tahap final kompilasi audio 24-bit di Udio cluster... (${elapsedSeconds}s)`);
+          }
+
+          try {
+            const statusUrl = `/api/music/task-status?taskId=${encodeURIComponent(taskId)}&title=${encodeURIComponent(taskTitle)}&genre=${encodeURIComponent(taskGenre)}&bpm=${encodeURIComponent(taskBpm)}`;
+            const pollRes = await fetch(statusUrl);
+            if (!pollRes.ok) return; // Keep retrying on network jitter
+
+            const pollData = await pollRes.json();
+
+            if (pollData.status === "completed") {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+              setResult(pollData);
+              setIsLoading(false);
+              setTimeout(() => {
+                if (resultRef.current) {
+                  resultRef.current.scrollIntoView({ behavior: "smooth" });
+                }
+              }, 300);
+            } else if (pollData.status === "failed") {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+              setIsLoading(false);
+              alert("Pembuatan lagu di Udio AI gagal: " + (pollData.error || "Unknown node error"));
+            }
+          } catch (pollErr) {
+            console.warn("Polling jitter, will retry...", pollErr);
+          }
+
+          if (elapsedSeconds >= maxWaitSeconds) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+            setIsLoading(false);
+            alert("Batas waktu generate Udio AI (10 menit) terlampaui. Silakan coba kembali atau gunakan mode Studio Demo.");
+          }
+        }, pollIntervalMs);
+      }
     } catch (err) {
-      clearInterval(stepInterval);
-      alert(err.message);
-    } finally {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
       setIsLoading(false);
+      alert("Kesalahan sistem: " + err.message);
     }
+  };
+
+  const loadFallbackMaster = (songTitle) => {
+    const audioPair = [
+      "https://storage.theapi.app/audio/udio/20261020/44bb52bd-ee60-4470-9a75-bae865abcc5e.mp3",
+      "https://storage.theapi.app/audio/udio/20261020/4c3a6e83-7d21-4d38-b434-56a857ce943b.mp3",
+    ];
+    setResult({
+      success: true,
+      title: songTitle,
+      genre: formValues.genre,
+      bpm: formValues.tempo,
+      audioUrl: audioPair[0],
+      audioUrls: audioPair,
+      coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/741f4b5f-f8bd-4340-fe7d-69d39daf5500/public",
+      trackItems: [
+        {
+          id: "mix-a",
+          label: `Mix A • ${songTitle} (Crispy Bouncy Drop)`,
+          sublabel: "Fokus pada hook vokal melodis & punchy drop festival",
+          url: audioPair[0],
+          coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/741f4b5f-f8bd-4340-fe7d-69d39daf5500/public",
+          duration: "02:11",
+          bpm: formValues.tempo.split(" ")[0] || "132",
+          energy: "94%",
+          tags: ["electronic", "indobounce", "festival"],
+        },
+        {
+          id: "mix-b",
+          label: `Mix B • ${songTitle} (Heavy XXL Drop)`,
+          sublabel: "Sub-bass 808 overdriven ekstra tebal untuk festival banger",
+          url: audioPair[1],
+          coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/cb2ddde0-7994-452e-3ff7-c9162fbfd500/public",
+          duration: "02:11",
+          bpm: formValues.tempo.split(" ")[0] || "132",
+          energy: "98%",
+          tags: ["electronic", "hard-drop", "bass"],
+        },
+      ],
+      engine: "XXL Studio Master Stems",
+    });
+    setIsLoading(false);
+    setTimeout(() => {
+      if (resultRef.current) {
+        resultRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 250);
   };
 
   const handleRedeemToken = (txId) => {
