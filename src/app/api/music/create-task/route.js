@@ -2,31 +2,12 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const DEMO_STEMS = {
-  "Indobounce": [
-    "https://storage.theapi.app/audio/udio/20261020/44bb52bd-ee60-4470-9a75-bae865abcc5e.mp3",
-    "https://storage.theapi.app/audio/udio/20261020/4c3a6e83-7d21-4d38-b434-56a857ce943b.mp3",
-  ],
-  "Drift Phonk": [
-    "https://tempfile.aiquickdraw.com/r/97ce817d-d4d0-4d6a-8de7-4a9b850c2fc0.mp3",
-    "https://tempfile.aiquickdraw.com/r/bec2c050-c666-4ad1-bed4-529098d530a3.mp3",
-  ],
-  "Slap House": [
-    "https://tempfile.aiquickdraw.com/r/bec2c050-c666-4ad1-bed4-529098d530a3.mp3",
-    "https://tempfile.aiquickdraw.com/r/4a89a4e5-bdf8-4812-b404-bffc453b345b.mp3",
-  ],
-  "Hardstyle": [
-    "https://tempfile.aiquickdraw.com/r/4a89a4e5-bdf8-4812-b404-bffc453b345b.mp3",
-    "https://storage.theapi.app/audio/udio/20261020/44bb52bd-ee60-4470-9a75-bae865abcc5e.mp3",
-  ],
-  "Jersey Club": [
-    "https://storage.theapi.app/audio/udio/20261020/4c3a6e83-7d21-4d38-b434-56a857ce943b.mp3",
-    "https://tempfile.aiquickdraw.com/r/97ce817d-d4d0-4d6a-8de7-4a9b850c2fc0.mp3",
-  ],
-  "default": [
-    "https://storage.theapi.app/audio/udio/20261020/44bb52bd-ee60-4470-9a75-bae865abcc5e.mp3",
-    "https://storage.theapi.app/audio/udio/20261020/4c3a6e83-7d21-4d38-b434-56a857ce943b.mp3",
-  ],
+const VOCAL_PROMPTS = {
+  female_diva: "female vocalist, clear melodic pop singing, euphoric vocal hook",
+  vocoder: "robotic vocoder vocals, autotune vocals, synth vocal chops",
+  hype_mc: "hype mc vocal shouts, rap vocal chops, aggressive crowd chanting",
+  pitch_deep: "deep pitched male vocal, dark slap house vocal, club vocal chops",
+  instrumental: "pure instrumental club banger, no singing, no vocals",
 };
 
 export async function POST(request) {
@@ -40,7 +21,7 @@ export async function POST(request) {
       tempo = "132 BPM",
       lyrics = "",
       title = "",
-      isSandbox = false,
+      forceDemo = false,
       _internalTransactionId,
     } = body;
 
@@ -51,10 +32,34 @@ export async function POST(request) {
 
     const songTitle = title.trim() || generateEdmTitle(genre, artistReference);
 
-    // If live API key is present and NOT running in sandbox-demo mode
-    if (apiKey && !isSandbox) {
+    // If live API key is present and NOT forced into static demo mode
+    if (apiKey && !forceDemo) {
       const isInstrumental = vocalType === "instrumental";
-      const promptDescription = `${genre}, ${tempo}, ${artistReference} style, electronic club festival, ${dropIntensity} drop, punchy kicks, crispy sub-bass`;
+      const vocalTag = VOCAL_PROMPTS[vocalType] || "energetic vocals, clear vocal singing";
+      
+      const promptDescription = isInstrumental
+        ? `${genre}, ${tempo}, ${artistReference} style, electronic club festival, ${dropIntensity} drop, punchy kicks, instrumental`
+        : `${genre}, ${tempo}, ${artistReference} style, electronic club festival, ${dropIntensity} drop, ${vocalTag}, punchy kicks, crispy sub-bass`;
+
+      // Format custom lyrics: Ensure Udio section tags exist so Udio sings the lyrics
+      const formattedLyrics = isInstrumental
+        ? ""
+        : formatLyricsForUdio(lyrics, genre);
+
+      const payload = {
+        model: "music-u",
+        task_type: "generate_music",
+        input: {
+          gpt_description_prompt: promptDescription,
+          lyrics: formattedLyrics,
+          lyrics_type: isInstrumental ? "instrumental" : (formattedLyrics ? "user" : "generate"),
+          negative_tags: isInstrumental ? "vocals, singing, voice, vocal chops" : "",
+          seed: -1,
+        },
+      };
+
+      console.log(`[${providerName} Udio Task] Dispatching with lyrics_type:`, payload.input.lyrics_type);
+      console.log(`[Lyrics Content Preview]:`, formattedLyrics ? formattedLyrics.slice(0, 100) + "..." : "[Instrumental]");
 
       const createResponse = await fetch(endpoint, {
         method: "POST",
@@ -63,17 +68,7 @@ export async function POST(request) {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: "music-u",
-          task_type: "generate_music",
-          input: {
-            gpt_description_prompt: promptDescription,
-            lyrics: isInstrumental ? "" : (lyrics || `[Intro]\nLampu neon menyala di Jakarta\n\n[Build-Up]\nAre you ready for the drop?\n3... 2... 1... GO!\n\n[DROP]\n(Crispy XXL Bass Drop)`),
-            lyrics_type: isInstrumental ? "instrumental" : (lyrics ? "user" : "generate"),
-            negative_tags: isInstrumental ? "vocals, singing" : "",
-            seed: -1,
-          },
-        }),
+        body: JSON.stringify(payload),
       });
 
       const taskData = await createResponse.json();
@@ -105,18 +100,23 @@ export async function POST(request) {
         bpm: tempo,
         description: `Diramu via ${providerName} Udio AI (music-u). Style ${artistReference} dengan aransemen ${dropIntensity} drop.`,
         transactionId: _internalTransactionId || null,
+        lyricsUsed: formattedLyrics,
       });
     }
 
-    // Sandbox or Instant Demo Stems Mode
-    const audioPair = DEMO_STEMS[genre] || DEMO_STEMS["default"];
+    // Static Demo Stems Fallback (Only used if no API Key is available)
+    const audioPair = [
+      "https://storage.theapi.app/audio/udio/20261020/35353b59-e115-468d-97b8-0eb3acd7fdb7.mp3",
+      "https://storage.theapi.app/audio/udio/20261020/6c673fd4-1727-4cdb-af7d-4d821ad5162a.mp3",
+    ];
+
     const trackItems = [
       {
         id: "mix-a",
         label: `Mix A • ${songTitle} (Crispy Bouncy Drop)`,
         sublabel: "Fokus pada hook vokal melodis & punchy drop festival",
         url: audioPair[0],
-        coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/741f4b5f-f8bd-4340-fe7d-69d39daf5500/public",
+        coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/99e4c2d3-725d-4913-2b25-70e406f09000/public",
         duration: "02:11",
         bpm: tempo.split(" ")[0] || "132",
         energy: "94%",
@@ -127,7 +127,7 @@ export async function POST(request) {
         label: `Mix B • ${songTitle} (Heavy XXL Drop)`,
         sublabel: "Sub-bass 808 overdriven ekstra tebal untuk dancefloor booster",
         url: audioPair[1],
-        coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/cb2ddde0-7994-452e-3ff7-c9162fbfd500/public",
+        coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/eed99187-6321-41d6-cc37-6141e44e1b00/public",
         duration: "02:11",
         bpm: tempo.split(" ")[0] || "132",
         energy: "98%",
@@ -145,9 +145,9 @@ export async function POST(request) {
       audioUrl: audioPair[0],
       audioUrls: audioPair,
       trackItems,
-      coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/741f4b5f-f8bd-4340-fe7d-69d39daf5500/public",
+      coverUrl: "https://imagedelivery.net/C9yUr1FL21Q6JwfYYh2ozQ/99e4c2d3-725d-4913-2b25-70e406f09000/public",
       transactionId: _internalTransactionId || null,
-      engine: isSandbox ? "XXL Sandbox Studio Master" : "XXL AI Neural Engine",
+      engine: "XXL Studio Master Stems",
     });
   } catch (error) {
     return NextResponse.json(
@@ -155,6 +155,31 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+function formatLyricsForUdio(rawLyrics, genre) {
+  if (!rawLyrics || !rawLyrics.trim()) {
+    return `[Intro]\nLampu neon menyala di Jakarta\n\n[Build-Up]\nAre you ready for the drop?\n3... 2... 1... GO!\n\n[DROP]\n(Crispy XXL Bass Drop)`;
+  }
+
+  const trimmed = rawLyrics.trim();
+
+  // If user already used standard Udio structural tags like [Verse], [Chorus], [Intro], pass as-is
+  if (trimmed.includes("[") && trimmed.includes("]")) {
+    return trimmed;
+  }
+
+  // If user entered plain text or short sentences, wrap in structured tags so Udio neural vocal synthesizer sings every word
+  const lines = trimmed.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length <= 4) {
+    return `[Chorus]\n${trimmed}\n\n[DROP]\n(Crispy XXL Bass Drop)`;
+  }
+
+  const mid = Math.ceil(lines.length / 2);
+  const part1 = lines.slice(0, mid).join("\n");
+  const part2 = lines.slice(mid).join("\n");
+
+  return `[Verse]\n${part1}\n\n[Chorus]\n${part2}\n\n[DROP]\n(Crispy XXL Bass Drop)`;
 }
 
 function generateEdmTitle(genre, artist) {

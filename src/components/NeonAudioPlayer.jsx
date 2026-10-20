@@ -245,6 +245,19 @@ export default function NeonAudioPlayer({ result, onReset }) {
             </button>
           </div>
         </div>
+
+        {/* Lyrics & Hook Section */}
+        {(result?.lyrics || result?.lyricsUsed || currentTrack?.lyrics) && (
+          <div className="mt-5 border-t border-white/[0.08] pt-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-lime-neon mb-2">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Lirik & Vokal Chops yang Dinyanyikan:</span>
+            </div>
+            <div className="rounded-xl bg-obsidian-950 p-4 font-mono text-xs text-slate-300 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap border border-white/[0.05]">
+              {result?.lyrics || result?.lyricsUsed || currentTrack?.lyrics}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

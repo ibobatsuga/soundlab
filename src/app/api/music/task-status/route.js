@@ -96,6 +96,7 @@ export async function GET(request) {
         trackItems,
         songs,
         coverUrl: cover1,
+        lyrics: songA.lyrics || task.input?.lyrics || null,
         engine: `${providerName} Udio AI (music-u)`,
       });
     }
